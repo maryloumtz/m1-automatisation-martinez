@@ -2,7 +2,7 @@
   {
     "id": "GKbjeSTwLn72snGN",
     "name": "[CORE] Ingestion & Routage Tickets",
-    "description": "Normalise les webhooks Supabase, notifie les tickets critiques et passe les tickets a l'etat en_cours.",
+    "description": "Normalise les tickets ; PATCH critique avec 3 tentatives a 2000 ms ; notification non bloquante via sa sortie erreur.",
     "active": true,
     "isArchived": false,
     "nodes": [
@@ -95,7 +95,9 @@
           -180
         ],
         "id": "a4d1d187-501a-4e88-85ab-8b45e7b3f9c4",
-        "name": "Notification externe"
+        "name": "Notification externe",
+        "retryOnFail": false,
+        "onError": "continueErrorOutput"
       },
       {
         "parameters": {
@@ -134,7 +136,22 @@
           80
         ],
         "id": "251867c4-37b3-4ae8-b297-f73190468924",
-        "name": "Mise a jour en cours"
+        "name": "Mise a jour en cours",
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "onError": "stopWorkflow"
+      },
+      {
+        "parameters": {},
+        "type": "n8n-nodes-base.noOp",
+        "typeVersion": 1,
+        "position": [
+          1300,
+          -80
+        ],
+        "id": "28d62959-6140-4152-99c3-618d5d34ecad",
+        "name": "Notification indisponible (non bloquante)"
       }
     ],
     "connections": {
@@ -199,6 +216,18 @@
           [
             {
               "node": "Mise a jour en cours",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Notification externe": {
+        "main": [
+          [],
+          [
+            {
+              "node": "Notification indisponible (non bloquante)",
               "type": "main",
               "index": 0
             }
