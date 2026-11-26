@@ -88,3 +88,11 @@ serait nécessaire pour traiter ce cas. Si le PATCH réussit mais que l'audit
 Le tunnel de développement peut changer d'URL ; mettre à jour `webhookUrl` dans
 Bruno 11 et 12 après son renouvellement. Les notifications observées sont les
 réponses réussies de l'API Discord, sans vérification de lecture humaine.
+
+## Versioning livré
+
+Le commit `98f9e95` contient le TP5. Il a été poussé sur `origin/main`, avec
+les quatre commits précédents de la séance 3, dont la migration SQL.
+Le contrôle des secrets a porté sur les fichiers actuels et les commits sortants ;
+aucune clé serveur ni URL Discord privée n’a été détectée. L’URL factice
+de panne Discord documentée au TP2 a été vérifiée séparément.
