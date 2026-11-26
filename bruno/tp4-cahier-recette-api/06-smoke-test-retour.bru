@@ -1,0 +1,30 @@
+meta {
+  name: 06 - Smoke test retour en cours
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/tickets?id=eq.{{ticketId}}&select=id,statut,priorite
+  body: none
+  auth: none
+}
+
+headers {
+  apikey: {{secretKey}}
+}
+
+tests {
+  test("Le ticket injecte est passe automatiquement en cours", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body).to.be.an("array").with.lengthOf(1);
+    expect(body[0].id).to.equal(bru.getVar("ticketId"));
+    expect(body[0].statut).to.equal("en_cours");
+  });
+}
+
+docs {
+  Executer apres 03 puis 05, une fois le webhook traite (environ deux secondes).
+  Verifie le resultat reel en base, pas seulement le succes HTTP de l'insertion.
+}

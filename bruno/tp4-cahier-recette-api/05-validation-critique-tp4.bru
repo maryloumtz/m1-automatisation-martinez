@@ -1,0 +1,53 @@
+meta {
+  name: 05 - Validation critique TP4
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/tickets?select=*
+  body: json
+  auth: none
+}
+
+headers {
+  apikey: {{secretKey}}
+  Content-Type: application/json
+  Prefer: return=representation
+}
+
+body:json {
+  {
+    "organisation_id": "{{organisationId}}",
+    "cree_par": "{{profilId}}",
+    "titre": "Panne urgente de production",
+    "description": "Ticket critique injecte depuis Bruno pour valider la route True.",
+    "statut": "nouveau",
+    "priorite": "critique",
+    "metadata": {
+      "source": "bruno",
+      "scenario": "tp4-normalisation"
+    }
+  }
+}
+
+tests {
+  test("Le ticket critique est cree avec un statut HTTP 201", function () {
+    expect(res.getStatus()).to.equal(201);
+  });
+
+  test("La reponse contient le ticket critique", function () {
+    const body = res.getBody();
+
+    expect(body).to.be.an("array").with.lengthOf(1);
+    expect(body[0].priorite).to.equal("critique");
+    expect(body[0].titre).to.equal("Panne urgente de production");
+    expect(body[0].id).to.be.a("string");
+    bru.setVar("ticketId", body[0].id);
+  });
+}
+
+docs {
+  Insere un ticket critique avec la secretKey. Dans n8n, l'execution doit
+  traverser le noeud « Alerte immediate ? » puis la branche True.
+}

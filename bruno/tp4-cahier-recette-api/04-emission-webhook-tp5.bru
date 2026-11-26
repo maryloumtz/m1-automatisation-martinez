@@ -1,0 +1,57 @@
+meta {
+  name: 04 - Emission webhook TP5
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/tickets?select=*
+  body: json
+  auth: none
+}
+
+headers {
+  apikey: {{secretKey}}
+  Content-Type: application/json
+  Prefer: return=representation
+}
+
+body:json {
+  {
+    "organisation_id": "{{organisationId}}",
+    "cree_par": "{{profilId}}",
+    "titre": "Validation webhook TP5",
+    "description": "Ticket cree depuis Bruno pour verifier le webhook Supabase.",
+    "statut": "nouveau",
+    "priorite": "normale",
+    "metadata": {
+      "source": "bruno",
+      "scenario": "tp5"
+    }
+  }
+}
+
+tests {
+  test("Le ticket est cree avec un statut HTTP 201", function () {
+    expect(res.getStatus()).to.equal(201);
+  });
+
+  test("La reponse contient le ticket emis", function () {
+    const body = res.getBody();
+    const uuidV4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+    expect(body).to.be.an("array").with.lengthOf(1);
+    expect(body[0]).to.have.property("id");
+    expect(body[0].id).to.match(uuidV4);
+    expect(body[0].titre).to.equal("Validation webhook TP5");
+
+    bru.setVar("ticketId", body[0].id);
+  });
+}
+
+docs {
+  Insere un ticket standard avec la secretKey. Le webhook on_ticket_mutation
+  envoie le payload a l'URL de production n8n via le tunnel Cloudflare.
+  Verifier dans n8n la branche False, sans notification Discord, puis executer
+  06 pour confirmer que le ticket est passe a en_cours dans Supabase.
+}

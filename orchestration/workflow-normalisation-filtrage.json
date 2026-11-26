@@ -1,0 +1,225 @@
+[
+  {
+    "id": "GKbjeSTwLn72snGN",
+    "name": "[CORE] Ingestion & Routage Tickets",
+    "description": "Normalise les webhooks Supabase, notifie les tickets critiques et passe les tickets a l'etat en_cours.",
+    "active": true,
+    "isArchived": false,
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "tickets-webhook",
+          "responseMode": "onReceived",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.2,
+        "position": [
+          0,
+          0
+        ],
+        "id": "7f851a7a-3489-4dad-b235-862d8abafa47",
+        "name": "Webhook",
+        "webhookId": "510fd7a6-a4cc-49bf-b7cd-168c12c73568"
+      },
+      {
+        "parameters": {
+          "jsCode": "const items = $input.all();\n\nreturn items.map((item) => {\n  const record = item.json?.body?.record ?? item.json?.record;\n\n  if (!record || typeof record !== 'object') {\n    throw new Error('Payload webhook invalide : objet record manquant.');\n  }\n\n  const titre = typeof record.titre === 'string' ? record.titre : '';\n  const description = typeof record.description === 'string' ? record.description : '';\n  const priorite = typeof record.priorite === 'string' ? record.priorite : '';\n  const titreNormalise = titre.toLocaleLowerCase('fr-FR');\n  const motsUrgents = ['panne', 'bloquant', 'urgent'];\n\n  return {\n    json: {\n      ticket_id: record.id,\n      titre,\n      description,\n      priorite,\n      organisation_id: record.organisation_id,\n      alerte_immediate:\n        priorite.toLocaleLowerCase('fr-FR') === 'critique' ||\n        motsUrgents.some((mot) => titreNormalise.includes(mot)),\n    },\n  };\n});"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          240,
+          0
+        ],
+        "id": "1508fe41-56d0-4722-b342-73f7007dacc2",
+        "name": "Normalisation du ticket"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "boolean": [
+              {
+                "value1": "={{ $json.alerte_immediate }}",
+                "operation": "equal",
+                "value2": true
+              }
+            ]
+          }
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 1,
+        "position": [
+          500,
+          0
+        ],
+        "id": "52cb4f11-bdb1-4aaf-bb81-22a4de797238",
+        "name": "Alerte immediate ?"
+      },
+      {
+        "parameters": {},
+        "type": "n8n-nodes-base.noOp",
+        "typeVersion": 1,
+        "position": [
+          760,
+          -100
+        ],
+        "id": "13cff8ea-cfa6-477c-8ba2-e09175601bd6",
+        "name": "Route urgence (True)"
+      },
+      {
+        "parameters": {},
+        "type": "n8n-nodes-base.noOp",
+        "typeVersion": 1,
+        "position": [
+          760,
+          100
+        ],
+        "id": "859199ee-d641-4cef-9ea5-b2897e2dd594",
+        "name": "Route nominale (False)"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $env.NOTIFICATION_WEBHOOK_URL }}",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ { content: '🚨 **Ticket critique**\\n**Titre :** ' + $json.titre + '\\n**UUID :** `' + $json.ticket_id + '`\\n**Priorité :** ' + $json.priorite, allowed_mentions: { parse: [] } } }}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1020,
+          -180
+        ],
+        "id": "a4d1d187-501a-4e88-85ab-8b45e7b3f9c4",
+        "name": "Notification externe"
+      },
+      {
+        "parameters": {
+          "method": "PATCH",
+          "url": "={{ $env.SUPABASE_URL + '/rest/v1/tickets?id=eq.' + $json.ticket_id }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+              },
+              {
+                "name": "Authorization",
+                "value": "={{ 'Bearer ' + $env.SUPABASE_SERVICE_ROLE_KEY }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Prefer",
+                "value": "return=representation"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={ \"statut\": \"en_cours\" }",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1040,
+          80
+        ],
+        "id": "251867c4-37b3-4ae8-b297-f73190468924",
+        "name": "Mise a jour en cours"
+      }
+    ],
+    "connections": {
+      "Webhook": {
+        "main": [
+          [
+            {
+              "node": "Normalisation du ticket",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Normalisation du ticket": {
+        "main": [
+          [
+            {
+              "node": "Alerte immediate ?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Alerte immediate ?": {
+        "main": [
+          [
+            {
+              "node": "Route urgence (True)",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Route nominale (False)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Route urgence (True)": {
+        "main": [
+          [
+            {
+              "node": "Notification externe",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Mise a jour en cours",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Route nominale (False)": {
+        "main": [
+          [
+            {
+              "node": "Mise a jour en cours",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "binaryMode": "separate"
+    },
+    "staticData": null,
+    "meta": null,
+    "nodeGroups": [],
+    "pinData": {},
+    "triggerCount": 1,
+    "sourceWorkflowId": null,
+    "tags": [],
+    "versionMetadata": {
+      "name": null,
+      "description": null
+    }
+  }
+]

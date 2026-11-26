@@ -1,0 +1,31 @@
+meta {
+  name: 02 - Audit de cloisonnement
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/tickets?select=*
+  body: none
+  auth: none
+}
+
+headers {
+  apikey: {{publishableKey}}
+}
+
+tests {
+  test("RLS repond avec un statut HTTP 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("RLS masque tous les tickets a l utilisateur anonyme", function () {
+    expect(res.getBody()).to.deep.equal([]);
+  });
+}
+
+docs {
+  Utilise uniquement la publishableKey, sans JWT utilisateur.
+  RLS filtre les lignes non autorisees : PostgREST renvoie 200 et un tableau
+  vide plutot que 403, ce qui ne revele aucune donnee protegee.
+}

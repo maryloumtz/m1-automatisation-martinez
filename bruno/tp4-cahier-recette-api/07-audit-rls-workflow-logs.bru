@@ -1,0 +1,27 @@
+meta {
+  name: 07 - RLS workflow logs public
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/workflow_logs?select=id&limit=1
+  body: none
+  auth: none
+}
+
+headers {
+  apikey: {{publishableKey}}
+}
+
+tests {
+  test("La cle publique ne voit aucun journal de workflow", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody()).to.deep.equal([]);
+  });
+}
+
+docs {
+  Controle HTTP RLS du TP1 seance 3. Aucun en-tete Authorization.
+  Le test SQL transactionnel complete cette recette avec des lignes presentes.
+}

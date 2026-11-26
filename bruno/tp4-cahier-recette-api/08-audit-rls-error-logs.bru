@@ -1,0 +1,27 @@
+meta {
+  name: 08 - RLS error logs public
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/error_logs?select=id&limit=1
+  body: none
+  auth: none
+}
+
+headers {
+  apikey: {{publishableKey}}
+}
+
+tests {
+  test("La cle publique ne voit aucun journal d'erreur", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody()).to.deep.equal([]);
+  });
+}
+
+docs {
+  Controle HTTP RLS du TP1 seance 3. Aucun en-tete Authorization.
+  Le test SQL transactionnel complete cette recette avec des lignes presentes.
+}

@@ -1,0 +1,39 @@
+meta {
+  name: 03 - Preparation profil TP5
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/profils?select=id,organisation_id&limit=1
+  body: none
+  auth: none
+}
+
+headers {
+  apikey: {{secretKey}}
+}
+
+tests {
+  test("La lecture administrateur des profils reussit", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("Un profil existant fournit les cles du ticket", function () {
+    const body = res.getBody();
+
+    expect(body).to.be.an("array");
+    expect(body.length).to.be.greaterThan(0);
+    expect(body[0]).to.have.property("id");
+    expect(body[0]).to.have.property("organisation_id");
+
+    bru.setVar("profilId", body[0].id);
+    bru.setVar("organisationId", body[0].organisation_id);
+  });
+}
+
+docs {
+  Recupere un profil existant avec la secretKey et conserve son id ainsi que
+  son organisation_id comme variables temporaires. Ces valeurs respectent les
+  deux cles etrangeres exigees par la table tickets.
+}

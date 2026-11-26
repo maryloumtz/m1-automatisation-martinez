@@ -1,0 +1,10 @@
+{
+  "version": "1",
+  "name": "TP 4 et TP 5 - Recette API",
+  "type": "collection",
+  "defaultEnvironment": "Supabase",
+  "ignore": [
+    "node_modules",
+    ".git"
+  ]
+}

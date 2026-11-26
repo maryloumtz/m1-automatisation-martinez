@@ -1,0 +1,45 @@
+meta {
+  name: 01 - Injection Admin
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/organisations?select=id
+  body: json
+  auth: none
+}
+
+headers {
+  apikey: {{secretKey}}
+  Content-Type: application/json
+  Prefer: return=representation
+}
+
+body:json {
+  {
+    "nom": "Alpha Corp"
+  }
+}
+
+tests {
+  test("L organisation est creee avec un statut HTTP 201", function () {
+    expect(res.getStatus()).to.equal(201);
+  });
+
+  test("La reponse contient l UUID de la nouvelle organisation", function () {
+    const body = res.getBody();
+    const uuidV4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+    expect(body).to.be.an("array").with.lengthOf(1);
+    expect(body[0]).to.have.property("id");
+    expect(body[0].id).to.match(uuidV4);
+    bru.setVar("organisationId", body[0].id);
+  });
+}
+
+docs {
+  Utilise la secretKey pour contourner RLS et creer l organisation Alpha Corp.
+  L en-tete Prefer demande a PostgREST de retourner la ligne inseree afin de
+  verifier son UUID.
+}
