@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
-const [workflow] = JSON.parse(readFileSync(new URL('../workflow-normalisation-filtrage.json', import.meta.url)));
+const [workflow] = JSON.parse(readFileSync(new URL('../workflows/[CORE] Ingestion & Routage Tickets.json', import.meta.url)));
 const code = workflow.nodes.find((node) => node.name === 'Normalisation du ticket').parameters.jsCode;
 const ticket = {
   id: '11111111-1111-4111-8111-111111111111',

@@ -1,4 +1,4 @@
-# Recette API — séance 2 et séance 3 TP1 à TP4
+# Recette API — séance 2 et séance 3 TP1 à TP5
 
 Ouvrir ce dossier comme collection Bruno et sélectionner **Supabase**.
 Renseigner `publishableKey` et `secretKey` dans les variables secrètes de Bruno,
@@ -16,6 +16,8 @@ jamais dans les fichiers `.bru`.
 | 08 | Lecture publique de `error_logs` : HTTP 200 et `[]` |
 | 09 | Audit du ticket courant : une ligne `success`, clé déterministe |
 | 10 | Lecture du crash TP4 par son identifiant d'exécution CORE |
+| 11 | Événement direct vers n8n pour la rafale anti-doublon TP5 |
+| 12 | Poison pill TP5 : UUID invalide, erreur PATCH puis OPS |
 
 ## Smoke test
 
@@ -47,6 +49,27 @@ Pour simuler un crash : dans le Code initial de CORE, ajouter temporairement
 `throw new Error("Crash de test DLQ");`, publier, puis exécuter **04**.
 Contrôler l'alerte et **10**, retirer le `throw`, republier et vérifier **04 → 06 → 09**.
 Le ticket du crash reste `nouveau` ; il n'est pas rejoué automatiquement.
+
+## TP5 : doublons et poison pill
+
+**11** réutilise un ticket dédié déjà présent en base. La recette a envoyé le
+même événement trois fois avec deux secondes de pause : un seul traitement et
+une seule notification, puis deux passages sur `Doublon ignore`. Le ticket de
+la requête est déjà audité ; les prochains tirs seront donc ignorés.
+
+Pour refaire un premier passage, préparer un ticket de test sans audit et
+adapter le payload et `replayTicketId`. La variable locale `webhookUrl` contient
+l'adresse du tunnel ; la mettre à jour si le tunnel change.
+
+**12** est à exécuter séparément : l'accusé HTTP 200 est attendu, mais le PATCH
+doit ensuite échouer en HTTP 400 sur l'UUID invalide. Vérifier CORE puis OPS et
+`error_logs` après au moins cinq secondes. La requête **10** reste spécifique
+au crash TP4 (elle attend son message) et ne valide pas la poison pill TP5.
+
+Ne pas utiliser `--iteration-count 3 --delay 2000` pour espacer une seule requête
+avec Bruno CLI 4.4.0 : le délai ne s'applique pas entre ces itérations. La boucle
+avec pause et les limites du filtre séquentiel sont documentées dans
+`../../orchestration/README.md`.
 
 ## Dossier de collection
 

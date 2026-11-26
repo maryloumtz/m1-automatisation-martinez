@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
-const [workflow] = JSON.parse(readFileSync(new URL('../workflow-audit-notification.json', import.meta.url)));
+const [workflow] = JSON.parse(readFileSync(new URL('../workflows/[SUB] Audit & Notification.json', import.meta.url)));
 const prepareCode = workflow.nodes.find((node) => node.name === 'Preparer audit').parameters.jsCode;
 const upsert = workflow.nodes.find((node) => node.name === 'Upsert audit').parameters;
 

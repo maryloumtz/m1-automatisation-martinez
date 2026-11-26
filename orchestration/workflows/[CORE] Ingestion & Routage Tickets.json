@@ -2,7 +2,7 @@
   {
     "id": "GKbjeSTwLn72snGN",
     "name": "[CORE] Ingestion & Routage Tickets",
-    "description": "Normalisation et cle deterministe ; PATCH resilient ; delegation synchrone audit et notification sur toutes les branches.",
+    "description": "Filtre des doublons sequentiels par cle deterministe ; PATCH resilient ; audit et notification via SUB ; erreurs vers OPS.",
     "active": true,
     "isArchived": false,
     "nodes": [
@@ -37,11 +37,69 @@
         "name": "Normalisation du ticket"
       },
       {
+        "id": "824d3174-989e-41ce-b885-94e36cbb37cd",
+        "name": "Rechercher cle idempotence",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          480,
+          0
+        ],
+        "parameters": {
+          "method": "GET",
+          "url": "={{ $env.SUPABASE_URL + '/rest/v1/workflow_logs?idempotency_key=eq.' + encodeURIComponent($('Normalisation du ticket').first().json.idempotency_key) + '&select=id&limit=1' }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "supabaseApi",
+          "options": {
+            "timeout": 5000
+          }
+        },
+        "credentials": {
+          "supabaseApi": {
+            "id": "tp3SupabaseCred01",
+            "name": "Supabase service_role - TP"
+          }
+        },
+        "alwaysOutputData": true,
+        "onError": "stopWorkflow"
+      },
+      {
+        "id": "637b1fc8-5083-460a-92c1-dfe8ac7af0bf",
+        "name": "Evenement inedit ?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 1,
+        "position": [
+          720,
+          0
+        ],
+        "parameters": {
+          "conditions": {
+            "string": [
+              {
+                "value1": "={{ $json.id }}",
+                "operation": "isEmpty"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "21293888-ffc6-4e9a-a1f3-7dad232119a2",
+        "name": "Doublon ignore",
+        "type": "n8n-nodes-base.noOp",
+        "typeVersion": 1,
+        "position": [
+          980,
+          280
+        ],
+        "parameters": {}
+      },
+      {
         "parameters": {
           "conditions": {
             "boolean": [
               {
-                "value1": "={{ $json.alerte_immediate }}",
+                "value1": "={{ $('Normalisation du ticket').first().json.alerte_immediate }}",
                 "operation": "equal",
                 "value2": true
               }
@@ -51,7 +109,7 @@
         "type": "n8n-nodes-base.if",
         "typeVersion": 1,
         "position": [
-          500,
+          980,
           0
         ],
         "id": "52cb4f11-bdb1-4aaf-bb81-22a4de797238",
@@ -62,7 +120,7 @@
         "type": "n8n-nodes-base.noOp",
         "typeVersion": 1,
         "position": [
-          760,
+          1240,
           -100
         ],
         "id": "13cff8ea-cfa6-477c-8ba2-e09175601bd6",
@@ -73,7 +131,7 @@
         "type": "n8n-nodes-base.noOp",
         "typeVersion": 1,
         "position": [
-          760,
+          1240,
           100
         ],
         "id": "859199ee-d641-4cef-9ea5-b2897e2dd594",
@@ -82,7 +140,7 @@
       {
         "parameters": {
           "method": "PATCH",
-          "url": "={{ $env.SUPABASE_URL + '/rest/v1/tickets?id=eq.' + $json.ticket_id }}",
+          "url": "={{ $env.SUPABASE_URL + '/rest/v1/tickets?id=eq.' + encodeURIComponent($('Normalisation du ticket').first().json.ticket_id) }}",
           "sendHeaders": true,
           "headerParameters": {
             "parameters": [
@@ -106,7 +164,7 @@
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
         "position": [
-          1040,
+          1520,
           80
         ],
         "id": "251867c4-37b3-4ae8-b297-f73190468924",
@@ -211,7 +269,7 @@
           }
         },
         "position": [
-          1320,
+          1800,
           80
         ],
         "onError": "stopWorkflow"
@@ -233,7 +291,7 @@
         "main": [
           [
             {
-              "node": "Alerte immediate ?",
+              "node": "Rechercher cle idempotence",
               "type": "main",
               "index": 0
             }
@@ -290,6 +348,35 @@
             }
           ]
         ]
+      },
+      "Rechercher cle idempotence": {
+        "main": [
+          [
+            {
+              "node": "Evenement inedit ?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Evenement inedit ?": {
+        "main": [
+          [
+            {
+              "node": "Alerte immediate ?",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Doublon ignore",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       }
     },
     "settings": {
@@ -298,15 +385,7 @@
       "errorWorkflow": "tp4GlobalError02"
     },
     "staticData": null,
-    "meta": null,
-    "nodeGroups": [],
     "pinData": {},
-    "triggerCount": 1,
-    "sourceWorkflowId": null,
-    "tags": [],
-    "versionMetadata": {
-      "name": null,
-      "description": null
-    }
+    "tags": []
   }
 ]

@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
 function normalise(payload) {
-  const [workflow] = JSON.parse(readFileSync(new URL('../workflow-global-error-handler.json', import.meta.url)));
+  const [workflow] = JSON.parse(readFileSync(new URL('../workflows/[OPS] Global Error Handler.json', import.meta.url)));
   const code = workflow.nodes.find(node => node.name === 'Normaliser incident').parameters.jsCode;
   return JSON.parse(JSON.stringify(vm.runInNewContext(`(function () { ${code}\n })()`, {
     $input: { all: () => [{ json: payload }] },

@@ -1,4 +1,4 @@
-# Relance n8n et recette — séance 3 TP1 à TP4
+# Relance n8n et recette — séance 3 TP1 à TP5
 
 Commandes à exécuter depuis la racine du dépôt, Docker Desktop ouvert.
 
@@ -147,18 +147,18 @@ Une absence d'alerte ou une panne Discord donne `notification_sent=false`.
 Une erreur de persistance d'audit arrête l'appel, plutôt que d'annoncer un succès.
 
 L'upsert est idempotent pour **la ligne d'audit**. Un nouvel appel avec la même
-clé peut encore renvoyer une notification ; la déduplication complète avant
-traitement appartient au TP5.
+clé peut encore renvoyer une notification si SUB est appelé directement.
+Le filtre séquentiel ajouté à CORE au TP5 évite cet appel pour un événement déjà audité.
 
 ### Import sur une autre instance n8n
 
 1. Créer un credential **Supabase API** avec l'URL du projet et sa clé serveur.
-2. Importer `workflow-audit-notification.json`, sélectionner ce credential dans
+2. Importer `workflows/[SUB] Audit & Notification.json`, sélectionner ce credential dans
    `Upsert audit`, puis publier SUB.
-3. Importer `workflow-global-error-handler.json`, sélectionner le credential
+3. Importer `workflows/[OPS] Global Error Handler.json`, sélectionner le credential
    dans `Archiver incident DLQ`, puis publier OPS.
-4. Importer `workflow-normalisation-filtrage.json`, sélectionner le credential
-   dans `Mise a jour en cours`, vérifier le workflow choisi dans `Audit et
+4. Importer `workflows/[CORE] Ingestion & Routage Tickets.json`, sélectionner le credential
+   dans `Rechercher cle idempotence` et `Mise a jour en cours`, vérifier le workflow choisi dans `Audit et
    notification` et **Settings → Error Workflow → [OPS] Global Error Handler**,
    puis publier CORE.
 5. Vérifier le `.env`, le tunnel et le webhook Supabase, puis faire la recette.
@@ -217,6 +217,70 @@ nécessairement le ticket d'origine et ne constitue pas un rejeu automatique.
 Si l'archivage échoue, consulter `Archivage indisponible` dans l'exécution OPS ;
 un statut global `success` peut contenir une erreur HTTP volontairement tolérée.
 Si Discord et Supabase tombent ensemble, aucune livraison externe n'est garantie.
-La déduplication globale avant traitement reste à réaliser au TP5.
+Le filtre séquentiel du TP5 est décrit ci-dessous ; il ne constitue pas un verrou atomique.
 
 Résultats : voir `docs/recette-seance-3-tp4.md` à la racine du dépôt.
+
+## TP5 — Filtre d'idempotence et poison pill
+
+Topologie de CORE :
+
+```text
+Webhook → Normalisation du ticket → GET workflow_logs → Evenement inedit ?
+                                                       ├─ True → Routage → PATCH → SUB
+                                                       └─ False → Doublon ignore
+```
+
+`Rechercher cle idempotence` interroge le registre avec la clé déterministe
+encodée dans l'URL et le credential Supabase. **Always Output Data** permet au
+GET vide `[]` de transmettre `{}` : la suite n'est pas arrêtée silencusement.
+`Evenement inedit ?` teste si `$json.id` est vide. L'absence d'ID poursuit le
+traitement ; sa présence termine la branche sans PATCH, sans appel SUB et sans
+notification. Le routage et le PATCH lisent les données via
+`$('Normalisation du ticket').first().json`, car le GET ne transporte plus le ticket.
+
+### Recette Bruno
+
+- **11** envoie directement un événement INSERT forgé vers le webhook public,
+  pour un ticket existant. Premier passage sans audit : `en_cours`, un audit,
+  une notification. Deux passages suivants espacés de deux secondes : No Operation.
+- Le ticket livré dans 11 est déjà audité. Un nouveau tir doit donc être ignoré.
+  Pour refaire le premier passage, utiliser un ticket de test sans audit, ou
+  supprimer uniquement son audit de test après avoir vérifié son identité.
+- **12** envoie `ticket-invalide-123`. Le webhook répond HTTP 200 immédiatement,
+  puis le PATCH échoue HTTP 400 après les retries. OPS archive et alerte.
+  Attendre au moins cinq secondes avant de consulter les exécutions.
+
+Pour envoyer trois fois 11 avec une pause réelle, depuis le dossier de collection :
+
+```bash
+for tir in 1 2 3; do
+  npx --yes @usebruno/cli@4.4.0 run 11-rafale-idempotence-tp5.bru || break
+  if [ "$tir" -lt 3 ]; then sleep 2; fi
+done
+```
+
+Avec Bruno CLI 4.4.0, `--iteration-count 3 --delay 2000` sur une seule requête
+n'espace pas les itérations. La recette validée a utilisé trois requêtes
+identiques dans une collection temporaire, avec `--delay 2000` entre elles.
+Ne pas lancer toute la collection : certaines requêtes créent des tickets,
+et 12 provoque volontairement une erreur.
+
+### Limites explicites
+
+Ce filtre protège les doublons **séquentiels après écriture de l'audit**.
+Deux événements arrivant avant cette écriture peuvent tous deux passer le GET ;
+cela a été observé lors du premier essai sans délai effectif. Un verrou atomique
+en entrée (`INSERT ... ON CONFLICT DO NOTHING`, statut `processing`) serait
+nécessaire pour couvrir cette concurrence stricte. Il ne fait pas partie de la
+topologie demandée dans ce TP.
+
+Un statut métier modifié puis un audit en échec peut aussi permettre un nouveau
+traitement au rejeu. Le webhook reste sans authentification comme dans le support ;
+la signature/secret est prévue en séance 7. Une clé fournie dans un header n'est
+pas utilisée dans cette version : les requêtes de la recette utilisent la clé
+déterministe construite depuis l'événement.
+
+Les trois exports finaux sont dans `orchestration/workflows/`. La migration
+d'observabilité existante reste appliquée ; aucune migration supplémentaire
+n'est nécessaire. Preuves : `docs/recette-seance-3-tp5.md`.

@@ -1,0 +1,60 @@
+meta {
+  name: 11 - Rafale anti-doublon TP5
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{webhookUrl}}
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+vars:pre-request {
+  webhookUrl: https://winston-length-univ-frank.trycloudflare.com/webhook/tickets-webhook
+  replayTicketId: 23c3ae4a-036c-4dd1-ab71-8e26af1a2b48
+}
+
+body:json {
+  {
+    "type": "INSERT",
+    "table": "tickets",
+    "schema": "public",
+    "record": {
+      "id": "{{replayTicketId}}",
+      "organisation_id": "b56e0fd9-ed3b-4c87-8a78-eadd9d39268b",
+      "cree_par": "a0b6bfaa-70c5-4ac0-9801-7d18e1151d82",
+      "titre": "Recette TP5 - evenement dedie",
+      "description": "Ticket dedie au test de deduplication sequentielle.",
+      "statut": "nouveau",
+      "priorite": "critique",
+      "metadata": {
+        "source": "recette-tp5"
+      },
+      "created_at": "2026-11-26T10:55:29.564611+00:00"
+    },
+    "old_record": null
+  }
+}
+
+tests {
+  test("Le webhook accuse reception HTTP 200", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().message).to.equal("Workflow was started");
+  });
+}
+
+docs {
+  Tir direct sur le webhook de production. Executer cette requete seule trois
+  fois, avec 2000 ms entre les tirs, dans le Runner ou Bruno CLI.
+  Premier tir : PATCH, audit et une notification. Suivants : Doublon ignore.
+  Le HTTP 200 est un accuse de reception, pas la preuve du traitement termine.
+  Le ticket de cette recette est deja audite apres le test livre : un nouveau
+  tir doit donc etre ignore. Pour refaire le premier passage, preparer un autre
+  ticket sans audit ou nettoyer uniquement l'audit de ce ticket de test.
+  Mettre a jour webhookUrl si le tunnel Cloudflare change.
+}
