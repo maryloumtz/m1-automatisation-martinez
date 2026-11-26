@@ -1,0 +1,43 @@
+meta {
+  name: 10 - Incident DLQ TP4
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{baseUrl}}/error_logs?execution_id=eq.{{executionId}}&select=id,execution_id,workflow_name,failed_node,error_message,payload_snapshot,resolved,created_at
+  body: none
+  auth: none
+}
+
+headers {
+  apikey: {{secretKey}}
+}
+
+vars:pre-request {
+  executionId: 22
+}
+
+tests {
+  test("Le crash cible est archive avec son contexte JSON", function () {
+    expect(res.getStatus()).to.equal(200);
+    const rows = res.getBody();
+    expect(rows).to.be.an("array").that.is.not.empty;
+    rows.forEach(function (row) {
+      expect(row.execution_id).to.equal(String(bru.getRequestVar("executionId")));
+      expect(row.workflow_name).to.equal("[CORE] Ingestion & Routage Tickets");
+      expect(row.failed_node).to.equal("Normalisation du ticket");
+      expect(row.error_message).to.include("Crash de test DLQ");
+      expect(row.payload_snapshot).to.be.an("object");
+      expect(String(row.payload_snapshot.execution.id)).to.equal(row.execution_id);
+      expect(row.resolved).to.equal(false);
+    });
+  });
+}
+
+docs {
+  Lecture seule du crash TP4. La variable locale executionId vaut 22 pour la
+  recette du 26 novembre 2026. Pour une nouvelle recette, remplacer cette valeur
+  par l'identifiant de l'execution CORE en echec dans n8n (pas celui de OPS).
+  La requete 08 verifie que ces memes journaux restent invisibles avec la cle publique.
+}

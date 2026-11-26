@@ -1,4 +1,4 @@
-# Recette API — séance 2 et séance 3 TP1 à TP3
+# Recette API — séance 2 et séance 3 TP1 à TP4
 
 Ouvrir ce dossier comme collection Bruno et sélectionner **Supabase**.
 Renseigner `publishableKey` et `secretKey` dans les variables secrètes de Bruno,
@@ -15,6 +15,7 @@ jamais dans les fichiers `.bru`.
 | 07 | Lecture publique de `workflow_logs` : HTTP 200 et `[]` |
 | 08 | Lecture publique de `error_logs` : HTTP 200 et `[]` |
 | 09 | Audit du ticket courant : une ligne `success`, clé déterministe |
+| 10 | Lecture du crash TP4 par son identifiant d'exécution CORE |
 
 ## Smoke test
 
@@ -36,8 +37,16 @@ Depuis le TP3, les deux branches enregistrent automatiquement un audit via
 Le ticket critique produit une notification ; le ticket normal n'en produit pas.
 Un titre contenant « panne », « bloquant » ou « urgent » déclenche également
 une notification, même avec une priorité normale.
-`error_logs` sera alimentée lors du TP Error Trigger. Le test SQL vérifie aussi
-le masquage RLS avec des lignes présentes.
+Depuis le TP4, **[OPS] Global Error Handler** archive les crashs de production
+dans `error_logs` et alerte Discord. La requête **10** lit l'incident de la recette
+(exécution CORE 22). Modifier sa variable locale `executionId` pour une nouvelle
+recette. **08** doit toujours retourner `[]` avec la clé publique, même lorsque
+la table contient des incidents.
+
+Pour simuler un crash : dans le Code initial de CORE, ajouter temporairement
+`throw new Error("Crash de test DLQ");`, publier, puis exécuter **04**.
+Contrôler l'alerte et **10**, retirer le `throw`, republier et vérifier **04 → 06 → 09**.
+Le ticket du crash reste `nouveau` ; il n'est pas rejoué automatiquement.
 
 ## Dossier de collection
 

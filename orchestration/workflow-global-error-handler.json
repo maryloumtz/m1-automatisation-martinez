@@ -1,0 +1,175 @@
+[
+  {
+    "id": "tp4GlobalError02",
+    "name": "[OPS] Global Error Handler",
+    "description": "Capture des crashs de production ; diagnostic defensif ; archivage DLQ et alerte independants et tolerants aux pannes.",
+    "active": true,
+    "isArchived": false,
+    "nodes": [
+      {
+        "id": "433b0494-8c17-43ec-b266-caf406e898fa",
+        "name": "Error Trigger",
+        "type": "n8n-nodes-base.errorTrigger",
+        "typeVersion": 1,
+        "parameters": {},
+        "position": [
+          0,
+          0
+        ]
+      },
+      {
+        "id": "2cb9472d-8980-4fa8-b449-8b920b9ea0e8",
+        "name": "Normaliser incident",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "parameters": {
+          "jsCode": "const text = (value, fallback) => typeof value === 'string' && value.trim() ? value : typeof value === 'number' ? String(value) : fallback;\nreturn $input.all().map((item) => {\n  const payload = item?.json && typeof item.json === 'object' && !Array.isArray(item.json) ? item.json : {};\n  const execution = payload?.execution;\n  const error = execution?.error ?? payload?.trigger?.error;\n  const incident = {\n    execution_id: text(execution?.id, 'unknown'),\n    workflow_name: text(payload?.workflow?.name, 'unknown'),\n    failed_node: text(execution?.lastNodeExecuted, text(execution?.error?.node?.name, text(payload?.trigger?.error?.node?.name, 'unknown'))),\n    error_message: text(error?.message, text(error?.cause?.message, 'Erreur inconnue')),\n    payload_snapshot: payload,\n  };\n  const short = (value, limit) => value.length > limit ? value.slice(0, limit - 1) + '…' : value;\n  return { json: { ...incident, alert_message: [\n    '🚨 Incident n8n — workflow en échec',\n    'Workflow : ' + short(incident.workflow_name, 200),\n    'Exécution : ' + short(incident.execution_id, 80),\n    'Nœud : ' + short(incident.failed_node, 200),\n    'Erreur : ' + short(incident.error_message, 1100),\n  ].join('\\n') } };\n});"
+        },
+        "position": [
+          240,
+          0
+        ]
+      },
+      {
+        "id": "c20c5a1e-3f39-4998-8e2a-b1a88e73b64e",
+        "name": "Archiver incident DLQ",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $env.SUPABASE_URL + '/rest/v1/error_logs' }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "supabaseApi",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Prefer",
+                "value": "return=representation"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ { execution_id: $json.execution_id, workflow_name: $json.workflow_name, failed_node: $json.failed_node, error_message: $json.error_message, payload_snapshot: $json.payload_snapshot } }}",
+          "options": {
+            "timeout": 5000
+          }
+        },
+        "position": [
+          520,
+          140
+        ],
+        "credentials": {
+          "supabaseApi": {
+            "id": "tp3SupabaseCred01",
+            "name": "Supabase service_role - TP"
+          }
+        },
+        "onError": "continueErrorOutput"
+      },
+      {
+        "id": "841180d8-5332-4393-8b21-3504119931fe",
+        "name": "Alerter astreinte",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $env.NOTIFICATION_WEBHOOK_URL }}",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ { content: $json.alert_message, allowed_mentions: { parse: [] } } }}",
+          "options": {
+            "timeout": 5000
+          }
+        },
+        "position": [
+          520,
+          -140
+        ],
+        "onError": "continueErrorOutput"
+      },
+      {
+        "id": "922be37f-b24a-41d1-9778-926f146aa369",
+        "name": "Archivage indisponible",
+        "type": "n8n-nodes-base.noOp",
+        "typeVersion": 1,
+        "parameters": {},
+        "position": [
+          780,
+          240
+        ]
+      },
+      {
+        "id": "f900777c-98c4-4aa2-a51e-deeed7203192",
+        "name": "Alerte indisponible",
+        "type": "n8n-nodes-base.noOp",
+        "typeVersion": 1,
+        "parameters": {},
+        "position": [
+          780,
+          -40
+        ]
+      }
+    ],
+    "connections": {
+      "Error Trigger": {
+        "main": [
+          [
+            {
+              "node": "Normaliser incident",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Normaliser incident": {
+        "main": [
+          [
+            {
+              "node": "Alerter astreinte",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Archiver incident DLQ",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Archiver incident DLQ": {
+        "main": [
+          [],
+          [
+            {
+              "node": "Archivage indisponible",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Alerter astreinte": {
+        "main": [
+          [],
+          [
+            {
+              "node": "Alerte indisponible",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1"
+    },
+    "pinData": {},
+    "staticData": null,
+    "tags": []
+  }
+]
