@@ -1,4 +1,4 @@
-# Recette API — séance 2 et séance 3 TP1
+# Recette API — séance 2 et séance 3 TP1 à TP3
 
 Ouvrir ce dossier comme collection Bruno et sélectionner **Supabase**.
 Renseigner `publishableKey` et `secretKey` dans les variables secrètes de Bruno,
@@ -14,6 +14,7 @@ jamais dans les fichiers `.bru`.
 | 06 | Contrôle du passage du ticket 04 ou 05 à `en_cours` |
 | 07 | Lecture publique de `workflow_logs` : HTTP 200 et `[]` |
 | 08 | Lecture publique de `error_logs` : HTTP 200 et `[]` |
+| 09 | Audit du ticket courant : une ligne `success`, clé déterministe |
 
 ## Smoke test
 
@@ -30,8 +31,13 @@ Les insertions créent réellement des tickets : ne pas relancer toute la collec
 pour simplement consulter un statut. Si 03 renvoie `[]`, créer un utilisateur
 Supabase Auth et son profil associé avant la recette.
 
-Les journaux sont créés au TP1 ; leur remplissage automatique appartient aux
-TP suivants. Le test SQL vérifie aussi le masquage RLS avec des lignes présentes.
+Depuis le TP3, les deux branches enregistrent automatiquement un audit via
+**[SUB] Audit & Notification**. Exécuter **09** après **06** pour le vérifier.
+Le ticket critique produit une notification ; le ticket normal n'en produit pas.
+Un titre contenant « panne », « bloquant » ou « urgent » déclenche également
+une notification, même avec une priorité normale.
+`error_logs` sera alimentée lors du TP Error Trigger. Le test SQL vérifie aussi
+le masquage RLS avec des lignes présentes.
 
 ## Dossier de collection
 

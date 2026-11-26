@@ -2,7 +2,7 @@
   {
     "id": "GKbjeSTwLn72snGN",
     "name": "[CORE] Ingestion & Routage Tickets",
-    "description": "Normalise les tickets ; PATCH critique avec 3 tentatives a 2000 ms ; notification non bloquante via sa sortie erreur.",
+    "description": "Normalisation et cle deterministe ; PATCH resilient ; delegation synchrone audit et notification sur toutes les branches.",
     "active": true,
     "isArchived": false,
     "nodes": [
@@ -25,7 +25,7 @@
       },
       {
         "parameters": {
-          "jsCode": "const items = $input.all();\n\nreturn items.map((item) => {\n  const record = item.json?.body?.record ?? item.json?.record;\n\n  if (!record || typeof record !== 'object') {\n    throw new Error('Payload webhook invalide : objet record manquant.');\n  }\n\n  const titre = typeof record.titre === 'string' ? record.titre : '';\n  const description = typeof record.description === 'string' ? record.description : '';\n  const priorite = typeof record.priorite === 'string' ? record.priorite : '';\n  const titreNormalise = titre.toLocaleLowerCase('fr-FR');\n  const motsUrgents = ['panne', 'bloquant', 'urgent'];\n\n  return {\n    json: {\n      ticket_id: record.id,\n      titre,\n      description,\n      priorite,\n      organisation_id: record.organisation_id,\n      alerte_immediate:\n        priorite.toLocaleLowerCase('fr-FR') === 'critique' ||\n        motsUrgents.some((mot) => titreNormalise.includes(mot)),\n    },\n  };\n});"
+          "jsCode": "const items = $input.all();\n\nreturn items.map((item) => {\n  const event = item.json?.body ?? item.json;\n  const record = event?.record;\n\n  if (!record || typeof record !== 'object') {\n    throw new Error('Payload webhook invalide : objet record manquant.');\n  }\n\n  const titre = typeof record.titre === 'string' ? record.titre : '';\n  const description = typeof record.description === 'string' ? record.description : '';\n  const priorite = typeof record.priorite === 'string' ? record.priorite : '';\n  const titreNormalise = titre.toLocaleLowerCase('fr-FR');\n  const motsUrgents = ['panne', 'bloquant', 'urgent'];\n\n  return {\n    json: {\n      idempotency_key: [event.table ?? 'tickets', record.id, event.type ?? 'INSERT', record.statut ?? 'nouveau'].join(':'),\n      ticket_id: record.id,\n      titre,\n      description,\n      priorite,\n      organisation_id: record.organisation_id,\n      alerte_immediate:\n        priorite.toLocaleLowerCase('fr-FR') === 'critique' ||\n        motsUrgents.some((mot) => titreNormalise.includes(mot)),\n    },\n  };\n});"
         },
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
@@ -81,39 +81,11 @@
       },
       {
         "parameters": {
-          "method": "POST",
-          "url": "={{ $env.NOTIFICATION_WEBHOOK_URL }}",
-          "sendBody": true,
-          "specifyBody": "json",
-          "jsonBody": "={{ { content: '🚨 **Ticket critique**\\n**Titre :** ' + $json.titre + '\\n**UUID :** `' + $json.ticket_id + '`\\n**Priorité :** ' + $json.priorite, allowed_mentions: { parse: [] } } }}",
-          "options": {}
-        },
-        "type": "n8n-nodes-base.httpRequest",
-        "typeVersion": 4.2,
-        "position": [
-          1020,
-          -180
-        ],
-        "id": "a4d1d187-501a-4e88-85ab-8b45e7b3f9c4",
-        "name": "Notification externe",
-        "retryOnFail": false,
-        "onError": "continueErrorOutput"
-      },
-      {
-        "parameters": {
           "method": "PATCH",
           "url": "={{ $env.SUPABASE_URL + '/rest/v1/tickets?id=eq.' + $json.ticket_id }}",
           "sendHeaders": true,
           "headerParameters": {
             "parameters": [
-              {
-                "name": "apikey",
-                "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
-              },
-              {
-                "name": "Authorization",
-                "value": "={{ 'Bearer ' + $env.SUPABASE_SERVICE_ROLE_KEY }}"
-              },
               {
                 "name": "Content-Type",
                 "value": "application/json"
@@ -127,7 +99,9 @@
           "sendBody": true,
           "specifyBody": "json",
           "jsonBody": "={ \"statut\": \"en_cours\" }",
-          "options": {}
+          "options": {},
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "supabaseApi"
         },
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
@@ -140,18 +114,107 @@
         "retryOnFail": true,
         "maxTries": 3,
         "waitBetweenTries": 2000,
-        "onError": "stopWorkflow"
+        "onError": "stopWorkflow",
+        "credentials": {
+          "supabaseApi": {
+            "id": "tp3SupabaseCred01",
+            "name": "Supabase service_role - TP"
+          }
+        }
       },
       {
-        "parameters": {},
-        "type": "n8n-nodes-base.noOp",
-        "typeVersion": 1,
+        "id": "75f8a1dc-552c-4f57-8bb6-1ce44576a1b6",
+        "name": "Audit et notification",
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.3,
+        "parameters": {
+          "source": "database",
+          "workflowId": {
+            "__rl": true,
+            "value": "tp3AuditNotify01",
+            "mode": "list",
+            "cachedResultName": "[SUB] Audit & Notification"
+          },
+          "mode": "once",
+          "workflowInputs": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "idempotency_key": "={{ $('Normalisation du ticket').first().json.idempotency_key }}",
+              "workflow_name": "[CORE] Ingestion & Routage Tickets",
+              "ticket_id": "={{ $('Normalisation du ticket').first().json.ticket_id }}",
+              "statut": "success",
+              "details": "={{ { titre: $('Normalisation du ticket').first().json.titre, description: $('Normalisation du ticket').first().json.description, priorite: $('Normalisation du ticket').first().json.priorite, organisation_id: $('Normalisation du ticket').first().json.organisation_id, alerte_immediate: $('Normalisation du ticket').first().json.alerte_immediate } }}",
+              "alert_message": "={{ $('Normalisation du ticket').first().json.alerte_immediate ? '🚨 **Ticket critique**\\n**Titre :** ' + $('Normalisation du ticket').first().json.titre + '\\n**UUID :** `' + $('Normalisation du ticket').first().json.ticket_id + '`\\n**Priorité :** ' + $('Normalisation du ticket').first().json.priorite : '' }}"
+            },
+            "matchingColumns": [],
+            "schema": [
+              {
+                "id": "idempotency_key",
+                "displayName": "idempotency_key",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "workflow_name",
+                "displayName": "workflow_name",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "ticket_id",
+                "displayName": "ticket_id",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "statut",
+                "displayName": "statut",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              },
+              {
+                "id": "details",
+                "displayName": "details",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "object"
+              },
+              {
+                "id": "alert_message",
+                "displayName": "alert_message",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "canBeUsedToMatch": true,
+                "type": "string"
+              }
+            ],
+            "attemptToConvertTypes": false,
+            "convertFieldsToString": false
+          },
+          "options": {
+            "waitForSubWorkflow": true
+          }
+        },
         "position": [
-          1300,
-          -80
+          1320,
+          80
         ],
-        "id": "28d62959-6140-4152-99c3-618d5d34ecad",
-        "name": "Notification indisponible (non bloquante)"
+        "onError": "stopWorkflow"
       }
     ],
     "connections": {
@@ -199,11 +262,6 @@
         "main": [
           [
             {
-              "node": "Notification externe",
-              "type": "main",
-              "index": 0
-            },
-            {
               "node": "Mise a jour en cours",
               "type": "main",
               "index": 0
@@ -222,12 +280,11 @@
           ]
         ]
       },
-      "Notification externe": {
+      "Mise a jour en cours": {
         "main": [
-          [],
           [
             {
-              "node": "Notification indisponible (non bloquante)",
+              "node": "Audit et notification",
               "type": "main",
               "index": 0
             }

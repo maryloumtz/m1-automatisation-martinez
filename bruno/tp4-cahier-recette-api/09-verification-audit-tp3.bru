@@ -1,0 +1,33 @@
+meta {
+  name: 09 - Audit du ticket TP3
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{baseUrl}}/workflow_logs?ticket_id=eq.{{ticketId}}&select=id,idempotency_key,workflow_name,ticket_id,statut,details
+  body: none
+  auth: none
+}
+
+headers {
+  apikey: {{secretKey}}
+}
+
+tests {
+  test("Le ticket possede une seule ligne d'audit en success", function () {
+    expect(res.getStatus()).to.equal(200);
+    const rows = res.getBody();
+    expect(rows).to.be.an("array").with.lengthOf(1);
+    expect(rows[0].ticket_id).to.equal(bru.getVar("ticketId"));
+    expect(rows[0].statut).to.equal("success");
+    expect(rows[0].idempotency_key).to.equal("tickets:" + bru.getVar("ticketId") + ":INSERT:nouveau");
+    expect(rows[0].workflow_name).to.equal("[CORE] Ingestion & Routage Tickets");
+    expect(rows[0].details).to.have.property("alerte_immediate").that.is.a("boolean");
+  });
+}
+
+docs {
+  Executer apres 03 puis 04 (nominal) ou 05 (critique), une fois n8n termine.
+  Les deux branches doivent enregistrer un audit. Seule la critique notifie.
+}

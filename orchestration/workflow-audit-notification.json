@@ -1,0 +1,292 @@
+[
+  {
+    "id": "tp3AuditNotify01",
+    "name": "[SUB] Audit & Notification",
+    "description": "Contrat type ; upsert de workflow_logs ; notification conditionnelle non bloquante ; retour audit_saved / notification_sent.",
+    "active": true,
+    "isArchived": false,
+    "nodes": [
+      {
+        "id": "d76960c8-7d4d-4afe-b63f-e69e5dabc463",
+        "name": "Entree audit",
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1.2,
+        "parameters": {
+          "inputSource": "workflowInputs",
+          "workflowInputs": {
+            "values": [
+              {
+                "name": "idempotency_key",
+                "type": "string"
+              },
+              {
+                "name": "workflow_name",
+                "type": "string"
+              },
+              {
+                "name": "ticket_id",
+                "type": "string"
+              },
+              {
+                "name": "statut",
+                "type": "string"
+              },
+              {
+                "name": "details",
+                "type": "object"
+              },
+              {
+                "name": "alert_message",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "position": [
+          0,
+          0
+        ]
+      },
+      {
+        "id": "43ec738f-945c-481d-8e65-5d4c74e36b21",
+        "name": "Preparer audit",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "parameters": {
+          "jsCode": "return $input.all().map(({ json }) => ({ json: { ...json, ticket_id: typeof json.ticket_id === 'string' && json.ticket_id.trim() ? json.ticket_id.trim() : null, alert_message: typeof json.alert_message === 'string' ? json.alert_message.trim() : '' } }));"
+        },
+        "position": [
+          240,
+          0
+        ]
+      },
+      {
+        "id": "26f80c62-55ac-408d-8c61-4d45f4435aaa",
+        "name": "Upsert audit",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $env.SUPABASE_URL + '/rest/v1/workflow_logs?on_conflict=idempotency_key' }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "supabaseApi",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Prefer",
+                "value": "resolution=merge-duplicates,return=representation"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ { idempotency_key: $json.idempotency_key, workflow_name: $json.workflow_name, ticket_id: $json.ticket_id, statut: $json.statut, details: $json.details } }}",
+          "options": {}
+        },
+        "position": [
+          480,
+          0
+        ],
+        "credentials": {
+          "supabaseApi": {
+            "id": "tp3SupabaseCred01",
+            "name": "Supabase service_role - TP"
+          }
+        },
+        "alwaysOutputData": true,
+        "onError": "stopWorkflow"
+      },
+      {
+        "id": "01bf6212-d8b1-4cd0-b733-98b2ec784e77",
+        "name": "Verifier audit",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "parameters": {
+          "jsCode": "const audit = $input.first().json;\nif (!audit.id || audit.idempotency_key !== $('Preparer audit').first().json.idempotency_key) {\n  throw new Error('Audit non confirme par PostgREST.');\n}\nreturn [{ json: { audit_saved: true } }];"
+        },
+        "position": [
+          720,
+          0
+        ]
+      },
+      {
+        "id": "63e73751-f374-4532-9401-4a9f8b96e6fe",
+        "name": "Message a envoyer ?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 1,
+        "parameters": {
+          "conditions": {
+            "boolean": [
+              {
+                "value1": "={{ $('Preparer audit').first().json.alert_message.length > 0 }}",
+                "operation": "equal",
+                "value2": true
+              }
+            ]
+          }
+        },
+        "position": [
+          960,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $env.NOTIFICATION_WEBHOOK_URL }}",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ { content: $('Preparer audit').first().json.alert_message, allowed_mentions: { parse: [] } } }}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1200,
+          -100
+        ],
+        "id": "a4d1d187-501a-4e88-85ab-8b45e7b3f9c4",
+        "name": "Notification externe",
+        "retryOnFail": false,
+        "onError": "continueErrorOutput"
+      },
+      {
+        "parameters": {},
+        "type": "n8n-nodes-base.noOp",
+        "typeVersion": 1,
+        "position": [
+          1440,
+          20
+        ],
+        "id": "28d62959-6140-4152-99c3-618d5d34ecad",
+        "name": "Notification indisponible (non bloquante)"
+      },
+      {
+        "id": "84e957f1-1764-4bcc-98dc-3547dd9ac69d",
+        "name": "Retour notification envoyee",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "parameters": {
+          "jsCode": "return [{ json: { audit_saved: true, notification_sent: true } }];"
+        },
+        "position": [
+          1680,
+          -160
+        ]
+      },
+      {
+        "id": "ed9a7114-e7da-40df-ac00-ef90c47ba899",
+        "name": "Retour sans notification",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "parameters": {
+          "jsCode": "return [{ json: { audit_saved: true, notification_sent: false } }];"
+        },
+        "position": [
+          1680,
+          160
+        ]
+      }
+    ],
+    "connections": {
+      "Entree audit": {
+        "main": [
+          [
+            {
+              "node": "Preparer audit",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Preparer audit": {
+        "main": [
+          [
+            {
+              "node": "Upsert audit",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Upsert audit": {
+        "main": [
+          [
+            {
+              "node": "Verifier audit",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Verifier audit": {
+        "main": [
+          [
+            {
+              "node": "Message a envoyer ?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Message a envoyer ?": {
+        "main": [
+          [
+            {
+              "node": "Notification externe",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Retour sans notification",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Notification externe": {
+        "main": [
+          [
+            {
+              "node": "Retour notification envoyee",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Notification indisponible (non bloquante)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Notification indisponible (non bloquante)": {
+        "main": [
+          [
+            {
+              "node": "Retour sans notification",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1"
+    },
+    "pinData": {},
+    "staticData": null,
+    "tags": []
+  }
+]
